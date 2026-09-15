@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { storageService } from '../services/storage';
 import { sosService } from '../services/api';
@@ -13,6 +13,7 @@ export function ResponderDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const timersRef = useRef<{ [key: string]: number | ReturnType<typeof setTimeout> }>({});
   
   const profileId = storageService.getProfileId();
 
@@ -31,7 +32,23 @@ export function ResponderDashboard() {
 
     try {
       const data = await sosService.getNearbyAlerts(profileId);
-      setAlerts(data.nearby_alerts || []);
+      const fetchedAlerts = data.nearby_alerts || [];
+      setAlerts(fetchedAlerts);
+      
+      // Setup expiration timers for initially fetched alerts
+      Object.values(timersRef.current).forEach(clearTimeout);
+      timersRef.current = {};
+      
+      fetchedAlerts.forEach((alert: NearbyAlert) => {
+        if (alert.expires_at) {
+          const timeUntilExpiry = new Date(alert.expires_at).getTime() - Date.now();
+          if (timeUntilExpiry > 0) {
+            timersRef.current[alert.alert_id] = setTimeout(() => {
+              setAlerts(prev => prev.filter(a => a.alert_id !== alert.alert_id));
+            }, timeUntilExpiry);
+          }
+        }
+      });
     } catch (err: any) {
       console.error('Error fetching nearby alerts:', err);
       setError('Could not load nearby alerts. Please check your connection.');
@@ -43,7 +60,81 @@ export function ResponderDashboard() {
 
   useEffect(() => {
     fetchAlerts();
+    
+    // Cleanup timers on unmount
+    return () => {
+      Object.values(timersRef.current).forEach(clearTimeout);
+    };
   }, [fetchAlerts]);
+
+  // WebSocket Connection
+  useEffect(() => {
+    if (!profileId) return;
+
+    let ws: WebSocket;
+    let reconnectTimeout: number | ReturnType<typeof setTimeout>;
+    
+    const connect = () => {
+      const apiUrl = import.meta.env.VITE_API_URL || window.location.origin;
+      const wsProtocol = apiUrl.startsWith('https') ? 'wss://' : 'ws://';
+      const wsHost = apiUrl.replace(/^https?:\/\//, '');
+      const wsUrl = `${wsProtocol}${wsHost}/ws/alerts/${profileId}`;
+      
+      ws = new WebSocket(wsUrl);
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          
+          if (payload.type === 'ALERT_CREATED') {
+            const newAlert = payload.data as NearbyAlert;
+            setAlerts(prev => {
+              // Prevent duplicates if already fetched via REST during WS setup
+              if (prev.some(a => a.alert_id === newAlert.alert_id)) return prev;
+              return [newAlert, ...prev];
+            });
+            
+            // Setup expiration timer for the new alert
+            if (newAlert.expires_at) {
+              const timeUntilExpiry = new Date(newAlert.expires_at).getTime() - Date.now();
+              if (timeUntilExpiry > 0) {
+                if (timersRef.current[newAlert.alert_id]) {
+                  clearTimeout(timersRef.current[newAlert.alert_id]);
+                }
+                timersRef.current[newAlert.alert_id] = setTimeout(() => {
+                  setAlerts(prev => prev.filter(a => a.alert_id !== newAlert.alert_id));
+                }, timeUntilExpiry);
+              }
+            }
+          } else if (payload.type === 'ALERT_RESOLVED') {
+            const resolvedAlertId = payload.data.alert_id;
+            setAlerts(prev => prev.filter(a => a.alert_id !== resolvedAlertId));
+            
+            if (timersRef.current[resolvedAlertId]) {
+              clearTimeout(timersRef.current[resolvedAlertId]);
+              delete timersRef.current[resolvedAlertId];
+            }
+          }
+        } catch (err) {
+          console.error("Failed to parse WebSocket message:", err);
+        }
+      };
+
+      ws.onclose = () => {
+        reconnectTimeout = setTimeout(connect, 3000); // Attempt reconnect after 3s
+      };
+    };
+
+    connect();
+
+    return () => {
+      clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.onclose = null; // Prevent reconnect on deliberate unmount cleanup
+        ws.close();
+      }
+    };
+  }, [profileId]);
 
   if (!profileId) {
     return (

@@ -33,5 +33,6 @@ export interface NearbyAlert {
   latitude: string;
   longitude: string;
   distance_km: number;
+  expires_at?: string;
 }
 

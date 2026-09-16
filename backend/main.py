@@ -154,10 +154,13 @@ def migrate_database():
         columns = [col["name"] for col in inspector.get_columns("emergency_alerts")]
         db = SessionLocal()
         try:
+            is_postgres = engine.name == "postgresql"
+            dt_type = "TIMESTAMP WITH TIME ZONE" if is_postgres else "DATETIME"
+
             if "created_at" not in columns:
-                db.execute(text("ALTER TABLE emergency_alerts ADD COLUMN created_at DATETIME"))
+                db.execute(text(f"ALTER TABLE emergency_alerts ADD COLUMN created_at {dt_type}"))
             if "expires_at" not in columns:
-                db.execute(text("ALTER TABLE emergency_alerts ADD COLUMN expires_at DATETIME"))
+                db.execute(text(f"ALTER TABLE emergency_alerts ADD COLUMN expires_at {dt_type}"))
 
             db.commit()
 

@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 from fastapi import FastAPI, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import create_engine, Column, String, Text, DateTime, inspect, text
+from sqlalchemy import create_engine, Column, String, Text, DateTime, inspect, text, UniqueConstraint
 from sqlalchemy.orm import sessionmaker, declarative_base, Session
 
 # --- Database Setup ---
@@ -61,6 +61,22 @@ class EmergencyAlert(Base):
     status = Column(String, default="active")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     expires_at = Column(DateTime, nullable=True)
+
+class AlertAcknowledgement(Base):
+    __tablename__ = "alert_acknowledgements"
+    __table_args__ = (
+        UniqueConstraint(
+            'alert_id',
+            'responder_profile_id',
+            name='uix_alert_responder'
+        ),
+    )
+
+    id = Column(String, primary_key=True, index=True, default=generate_uuid)
+    alert_id = Column(String, nullable=False, index=True)
+    responder_profile_id = Column(String, nullable=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
 # Create the tables
 Base.metadata.create_all(bind=engine)
 
@@ -142,33 +158,33 @@ def migrate_database():
                 db.execute(text("ALTER TABLE emergency_alerts ADD COLUMN created_at DATETIME"))
             if "expires_at" not in columns:
                 db.execute(text("ALTER TABLE emergency_alerts ADD COLUMN expires_at DATETIME"))
-            
+
             db.commit()
-            
+
             # Backfill existing active records to prevent NULL expires_at bugs
             current_time = datetime.now(timezone.utc)
             db.execute(
                 text("""
-                UPDATE emergency_alerts 
-                SET 
+                UPDATE emergency_alerts
+                SET
                     created_at = :current_time,
-                    expires_at = :future_time 
+                    expires_at = :future_time
                 WHERE status = 'active' AND (created_at IS NULL OR expires_at IS NULL)
                 """),
                 {"current_time": current_time, "future_time": current_time + timedelta(minutes=10)}
             )
-            
+
             # For historically resolved alerts, we don't care about expires_at being NULL
             # but setting created_at to current_time is better than NULL for schema consistency
             db.execute(
                 text("""
-                UPDATE emergency_alerts 
+                UPDATE emergency_alerts
                 SET created_at = :current_time
                 WHERE status != 'active' AND created_at IS NULL
                 """),
                 {"current_time": current_time}
             )
-            
+
             db.commit()
         except Exception as e:
             db.rollback()
@@ -176,7 +192,22 @@ def migrate_database():
             raise e
         finally:
             db.close()
-            
+
+    if "alert_acknowledgements" in inspector.get_table_names():
+        constraints = [c["name"] for c in inspector.get_unique_constraints("alert_acknowledgements")]
+        if "uix_alert_responder" not in constraints:
+            db = SessionLocal()
+            try:
+                # SQLite ALTER TABLE ADD CONSTRAINT is limited, so we use a safe fallback index creation
+                # which acts identically for enforcing uniqueness at the database level without dropping the table.
+                db.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uix_alert_responder ON alert_acknowledgements (alert_id, responder_profile_id)"))
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                print(f"Failed to add unique constraint to alert_acknowledgements: {e}")
+            finally:
+                db.close()
+
     if "profiles" in inspector.get_table_names():
         columns = [col["name"] for col in inspector.get_columns("profiles")]
         db = SessionLocal()
@@ -268,11 +299,11 @@ def update_profile(profile_id: str, profile: ProfileUpdate, db: Session = Depend
     db_profile = db.query(Profile).filter(Profile.id == profile_id).first()
     if db_profile is None:
         raise HTTPException(status_code=404, detail="Profile not found")
-    
+
     update_data = profile.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_profile, key, value)
-        
+
     db.commit()
     db.refresh(db_profile)
     return db_profile
@@ -301,7 +332,7 @@ async def sos_alert(profile_id: str, db: Session = Depends(get_db)):
         )
 
     current_time = datetime.now(timezone.utc)
-    
+
     # Check for existing active, unexpired alert
     existing_alert = db.query(EmergencyAlert).filter(
         EmergencyAlert.profile_id == profile_id,
@@ -310,6 +341,19 @@ async def sos_alert(profile_id: str, db: Session = Depends(get_db)):
     ).first()
 
     if existing_alert:
+        # Fetch acknowledgements for existing alert
+        acknowledged_responders = []
+        acks = db.query(AlertAcknowledgement).filter(AlertAcknowledgement.alert_id == existing_alert.id).all()
+        for ack in acks:
+            responder_profile = db.query(Profile).filter(Profile.id == ack.responder_profile_id).first()
+            if responder_profile:
+                acknowledged_responders.append({
+                    "profile_id": responder_profile.id,
+                    "full_name": responder_profile.full_name,
+                    "responder_phone": responder_profile.phone_number,
+                    "status": "on_the_way"
+                })
+
         return {
             "message": "SOS Alert already active",
             "alert_id": existing_alert.id,
@@ -321,7 +365,8 @@ async def sos_alert(profile_id: str, db: Session = Depends(get_db)):
             "allergies": db_profile.allergies,
             "medical_conditions": db_profile.medical_conditions,
             "emergency_contacts": db_profile.emergency_contacts,
-            "nearby_users": []  # Existing logic wouldn't re-notify
+            "nearby_users": [],  # Existing logic wouldn't re-notify
+            "acknowledged_responders": acknowledged_responders
         }
 
     # Create and save new emergency alert
@@ -363,7 +408,7 @@ async def sos_alert(profile_id: str, db: Session = Depends(get_db)):
                 "full_name": profile.full_name,
                 "distance_km": round(distance, 2)
             })
-            
+
             # Broadcast via WebSocket if the nearby user is connected
             ws_payload = {
                 "type": "ALERT_CREATED",
@@ -374,14 +419,29 @@ async def sos_alert(profile_id: str, db: Session = Depends(get_db)):
                     "latitude": db_profile.latitude,
                     "longitude": db_profile.longitude,
                     "distance_km": round(distance, 2),
-                    "expires_at": expires_at.isoformat()
+                    "expires_at": expires_at.isoformat(),
+                    "has_acknowledged": False
                 }
             }
             await manager.send_personal_message(ws_payload, profile.id)
 
+    # Fetch any existing acknowledgements just in case it's an existing alert returned
+    acknowledged_responders = []
+    if existing_alert:
+        acks = db.query(AlertAcknowledgement).filter(AlertAcknowledgement.alert_id == existing_alert.id).all()
+        for ack in acks:
+            responder_profile = db.query(Profile).filter(Profile.id == ack.responder_profile_id).first()
+            if responder_profile:
+                acknowledged_responders.append({
+                    "profile_id": responder_profile.id,
+                    "full_name": responder_profile.full_name,
+                    "responder_phone": responder_profile.phone_number,
+                    "status": "on_the_way"
+                })
+
     return {
         "message": "SOS Alert Triggered",
-        "alert_id": emergency_alert.id,
+        "alert_id": emergency_alert.id if not existing_alert else existing_alert.id,
         "profile_id": db_profile.id,
         "full_name": db_profile.full_name,
         "latitude": db_profile.latitude,
@@ -390,7 +450,8 @@ async def sos_alert(profile_id: str, db: Session = Depends(get_db)):
         "allergies": db_profile.allergies,
         "medical_conditions": db_profile.medical_conditions,
         "emergency_contacts": db_profile.emergency_contacts,
-        "nearby_users": nearby_users
+        "nearby_users": nearby_users,
+        "acknowledged_responders": acknowledged_responders
     }
 @app.get("/nearby/{profile_id}")
 def find_nearby_users(
@@ -497,6 +558,11 @@ def get_nearby_alerts(
                 Profile.id == alert.profile_id
             ).first()
 
+            has_acknowledged = db.query(AlertAcknowledgement).filter(
+                AlertAcknowledgement.alert_id == alert.id,
+                AlertAcknowledgement.responder_profile_id == profile_id
+            ).first() is not None
+
             nearby_alerts.append({
                 "alert_id": alert.id,
                 "profile_id": alert.profile_id,
@@ -504,7 +570,8 @@ def get_nearby_alerts(
                 "latitude": alert.latitude,
                 "longitude": alert.longitude,
                 "distance_km": round(distance, 2),
-                "expires_at": alert.expires_at.isoformat() if alert.expires_at else None
+                "expires_at": alert.expires_at.isoformat() if alert.expires_at else None,
+                "has_acknowledged": has_acknowledged
             })
 
     return {
@@ -514,10 +581,90 @@ def get_nearby_alerts(
     }
 
 
-@app.post("/alerts/{alert_id}/resolve")
-async def resolve_alert(alert_id: str, db: Session = Depends(get_db)):
+@app.post("/alerts/{alert_id}/respond")
+async def respond_to_alert(alert_id: str, profile_id: str, db: Session = Depends(get_db)):
     """
-    Mark an emergency alert as resolved.
+    Indicate that a responder is on the way to help with an active alert.
+    """
+    alert = db.query(EmergencyAlert).filter(
+        EmergencyAlert.id == alert_id
+    ).first()
+
+    if alert is None:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    current_time = datetime.now(timezone.utc)
+    # SQLAlchemy SQLite returns naive datetimes. Convert to aware for comparison.
+    expires_at = alert.expires_at.replace(tzinfo=timezone.utc) if alert.expires_at and alert.expires_at.tzinfo is None else alert.expires_at
+    if alert.status != "active" or (expires_at and expires_at < current_time):
+        raise HTTPException(status_code=400, detail="Alert is no longer active")
+
+    if alert.profile_id == profile_id:
+        raise HTTPException(status_code=400, detail="Cannot respond to your own SOS")
+
+    responder = db.query(Profile).filter(Profile.id == profile_id).first()
+    if responder is None:
+        raise HTTPException(status_code=404, detail="Responder profile not found")
+
+    if not alert.latitude or not alert.longitude:
+        raise HTTPException(status_code=400, detail="Alert location is missing")
+
+    if not responder.latitude or not responder.longitude:
+        raise HTTPException(status_code=400, detail="Responder location is missing")
+
+    distance = calculate_distance(
+        alert.latitude, alert.longitude,
+        responder.latitude, responder.longitude
+    )
+
+    if distance > 1.0:
+        raise HTTPException(status_code=403, detail="Responder is too far away to acknowledge")
+
+    # Check for existing acknowledgement (Idempotency)
+    existing_ack = db.query(AlertAcknowledgement).filter(
+        AlertAcknowledgement.alert_id == alert_id,
+        AlertAcknowledgement.responder_profile_id == profile_id
+    ).first()
+
+    if not existing_ack:
+        new_ack = AlertAcknowledgement(
+            alert_id=alert_id,
+            responder_profile_id=profile_id
+        )
+        db.add(new_ack)
+        try:
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            # If concurrent request already inserted it, catch the unique constraint violation
+            # and gracefully fall through to sending the response (idempotent success)
+            if "UNIQUE constraint failed" not in str(e) and "Duplicate entry" not in str(e):
+                raise HTTPException(status_code=500, detail="Database error occurred")
+            pass
+        else:
+            # Broadcast to SOS sender only if we actually inserted it
+            ws_payload = {
+                "type": "ALERT_RESPONDER_ACKNOWLEDGED",
+                "data": {
+                    "alert_id": alert.id,
+                    "responder_profile_id": responder.id,
+                    "responder_name": responder.full_name,
+                    "responder_phone": responder.phone_number,
+                    "status": "on_the_way"
+                }
+            }
+            await manager.send_personal_message(ws_payload, alert.profile_id)
+
+    return {
+        "message": "Acknowledgement recorded successfully",
+        "alert_id": alert_id,
+        "responder_profile_id": profile_id
+    }
+
+@app.post("/alerts/{alert_id}/resolve")
+async def resolve_alert(alert_id: str, profile_id: str, db: Session = Depends(get_db)):
+    """
+    Mark an emergency alert as resolved. Only the SOS owner can do this.
     """
     alert = db.query(EmergencyAlert).filter(
         EmergencyAlert.id == alert_id
@@ -527,6 +674,12 @@ async def resolve_alert(alert_id: str, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=404,
             detail="Alert not found"
+        )
+
+    if alert.profile_id != profile_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the SOS owner can resolve this alert"
         )
 
     alert.status = "resolved"

@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom';
 import { storageService } from '../services/storage';
 import { sosService } from '../services/api';
 import type { NearbyAlert } from '../types';
-import { 
-  ShieldAlert, MapPin, Loader2, AlertCircle, 
-  RefreshCw, User, Plus, Activity
+import {
+  ShieldAlert, MapPin, Loader2, AlertCircle,
+  RefreshCw, User, Plus, Activity, ChevronRight, CheckCircle, Navigation
 } from 'lucide-react';
 
 export function ResponderDashboard() {
@@ -13,8 +13,9 @@ export function ResponderDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [acknowledgingId, setAcknowledgingId] = useState<string | null>(null);
   const timersRef = useRef<{ [key: string]: number | ReturnType<typeof setTimeout> }>({});
-  
+
   const profileId = storageService.getProfileId();
 
   const fetchAlerts = useCallback(async (showRefreshIndicator = false) => {
@@ -34,11 +35,11 @@ export function ResponderDashboard() {
       const data = await sosService.getNearbyAlerts(profileId);
       const fetchedAlerts = data.nearby_alerts || [];
       setAlerts(fetchedAlerts);
-      
+
       // Setup expiration timers for initially fetched alerts
       Object.values(timersRef.current).forEach(clearTimeout);
       timersRef.current = {};
-      
+
       fetchedAlerts.forEach((alert: NearbyAlert) => {
         if (alert.expires_at) {
           const timeUntilExpiry = new Date(alert.expires_at).getTime() - Date.now();
@@ -60,12 +61,30 @@ export function ResponderDashboard() {
 
   useEffect(() => {
     fetchAlerts();
-    
+
     // Cleanup timers on unmount
     return () => {
       Object.values(timersRef.current).forEach(clearTimeout);
     };
   }, [fetchAlerts]);
+
+  const handleAcknowledge = async (alertId: string) => {
+    if (acknowledgingId || !profileId) return;
+
+    setAcknowledgingId(alertId);
+    try {
+      await sosService.acknowledgeAlert(alertId, profileId);
+      // Update local state to reflect acknowledgement
+      setAlerts(prev => prev.map(a =>
+        a.alert_id === alertId ? { ...a, has_acknowledged: true } : a
+      ));
+    } catch (err) {
+      console.error('Error acknowledging alert:', err);
+      alert('Failed to acknowledge the alert. Please try again.');
+    } finally {
+      setAcknowledgingId(null);
+    }
+  };
 
   // WebSocket Connection
   useEffect(() => {
@@ -73,19 +92,19 @@ export function ResponderDashboard() {
 
     let ws: WebSocket;
     let reconnectTimeout: number | ReturnType<typeof setTimeout>;
-    
+
     const connect = () => {
       const apiUrl = import.meta.env.VITE_API_URL || window.location.origin;
       const wsProtocol = apiUrl.startsWith('https') ? 'wss://' : 'ws://';
       const wsHost = apiUrl.replace(/^https?:\/\//, '');
       const wsUrl = `${wsProtocol}${wsHost}/ws/alerts/${profileId}`;
-      
+
       ws = new WebSocket(wsUrl);
 
       ws.onmessage = (event) => {
         try {
           const payload = JSON.parse(event.data);
-          
+
           if (payload.type === 'ALERT_CREATED') {
             const newAlert = payload.data as NearbyAlert;
             setAlerts(prev => {
@@ -93,7 +112,7 @@ export function ResponderDashboard() {
               if (prev.some(a => a.alert_id === newAlert.alert_id)) return prev;
               return [newAlert, ...prev];
             });
-            
+
             // Setup expiration timer for the new alert
             if (newAlert.expires_at) {
               const timeUntilExpiry = new Date(newAlert.expires_at).getTime() - Date.now();
@@ -108,8 +127,9 @@ export function ResponderDashboard() {
             }
           } else if (payload.type === 'ALERT_RESOLVED') {
             const resolvedAlertId = payload.data.alert_id;
+
             setAlerts(prev => prev.filter(a => a.alert_id !== resolvedAlertId));
-            
+
             if (timersRef.current[resolvedAlertId]) {
               clearTimeout(timersRef.current[resolvedAlertId]);
               delete timersRef.current[resolvedAlertId];
@@ -191,7 +211,7 @@ export function ResponderDashboard() {
             <h3 className="font-bold text-red-900 text-lg mb-1">Error Loading Alerts</h3>
             <p className="text-sm text-red-700">{error}</p>
           </div>
-          <button 
+          <button
             onClick={() => fetchAlerts()}
             className="mt-2 px-6 py-2 bg-red-100 hover:bg-red-200 text-red-800 font-semibold rounded-full transition-colors text-sm"
           >
@@ -211,28 +231,66 @@ export function ResponderDashboard() {
       ) : (
         <div className="space-y-4">
           {alerts.map((alert) => (
-            <Link
-              to={`/emergency/${alert.profile_id}`}
-              key={alert.alert_id} 
-              className="block bg-white border border-red-100 rounded-2xl p-5 shadow-sm relative overflow-hidden hover:shadow-md hover:border-red-300 transition-all cursor-pointer group"
+            <div
+              key={alert.alert_id}
+              className="block bg-white border border-red-100 rounded-2xl shadow-sm relative overflow-hidden group"
             >
-              <div className="absolute top-0 left-0 w-1.5 h-full bg-red-500 group-hover:bg-red-600 transition-colors"></div>
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-bold text-gray-900 text-lg group-hover:text-red-700 transition-colors">
-                    {alert.full_name || 'Unknown User'}
-                  </h3>
-                  <div className="flex items-center gap-1.5 text-gray-500 text-sm mt-1">
-                    <MapPin className="w-4 h-4 text-red-500" />
-                    <span>{alert.distance_km.toFixed(2)} km away</span>
+              <div className="absolute top-0 left-0 w-1.5 h-full bg-red-500"></div>
+
+              <div className="p-5">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="font-bold text-gray-900 text-lg">
+                      {alert.full_name || 'Unknown User'}
+                    </h3>
+                    <div className="flex items-center gap-1.5 text-gray-500 text-sm mt-1">
+                      <MapPin className="w-4 h-4 text-red-500" />
+                      <span>{alert.distance_km.toFixed(2)} km away</span>
+                    </div>
+                  </div>
+                  <div className="bg-red-50 text-red-700 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 animate-pulse">
+                    <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                    ACTIVE
                   </div>
                 </div>
-                <div className="bg-red-50 text-red-700 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 animate-pulse">
-                  <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                  ACTIVE
+
+                <div className="flex flex-col gap-3 pt-4 border-t border-gray-100">
+                  <div className="flex items-center gap-3">
+                    <Link
+                      to={`/emergency/${alert.profile_id}`}
+                      className="flex-1 bg-gray-50 hover:bg-gray-100 text-gray-700 font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm"
+                    >
+                      View Details
+                      <ChevronRight className="w-4 h-4" />
+                    </Link>
+                  </div>
+
+                  <button
+                    onClick={() => handleAcknowledge(alert.alert_id)}
+                    disabled={alert.has_acknowledged || acknowledgingId === alert.alert_id}
+                    className={`w-full font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm ${
+                      alert.has_acknowledged
+                        ? 'bg-green-100 text-green-800 border border-green-200'
+                        : 'bg-brand-600 hover:bg-brand-700 text-white shadow-sm'
+                    } disabled:opacity-80`}
+                  >
+                    {acknowledgingId === alert.alert_id ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : alert.has_acknowledged ? (
+                      <>
+                        <CheckCircle className="w-5 h-5 text-green-600" />
+                        You're Responding
+                      </>
+                    ) : (
+                      <>
+                        <Navigation className="w-5 h-5" />
+                        I'm Coming to Help
+                      </>
+                    )}
+                  </button>
                 </div>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       )}

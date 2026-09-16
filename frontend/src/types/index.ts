@@ -13,6 +13,7 @@ export interface Profile {
 
 export interface SOSResponse {
   message: string;
+  alert_id: string;
   profile_id: string;
   full_name: string;
   blood_group: string;
@@ -20,6 +21,7 @@ export interface SOSResponse {
   medical_conditions: string;
   emergency_contacts: string;
   nearby_users: NearbyUser[];
+  acknowledged_responders?: AcknowledgedResponder[];
 }
 export interface NearbyUser {
   profile_id: string;
@@ -34,5 +36,13 @@ export interface NearbyAlert {
   longitude: string;
   distance_km: number;
   expires_at?: string;
+  has_acknowledged?: boolean;
+}
+
+export interface AcknowledgedResponder {
+  profile_id: string;
+  full_name: string;
+  responder_phone?: string;
+  status: string;
 }
 

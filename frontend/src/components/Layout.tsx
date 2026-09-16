@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { HeartPulse, Home, PlusCircle, User, AlertCircle } from 'lucide-react';
+import { HeartPulse, Home, PlusCircle, User, AlertCircle, Activity } from 'lucide-react';
 
 interface LayoutProps {
   children: ReactNode;
@@ -53,6 +53,11 @@ export function Layout({ children }: LayoutProps) {
           <Link to="/card" className={`flex flex-col items-center gap-1 ${isActive('/card')}`}>
             <User className="w-6 h-6" />
             <span className="text-[10px] font-medium">My Card</span>
+          </Link>
+
+          <Link to="/dashboard" className={`flex flex-col items-center gap-1 ${isActive('/dashboard')}`}>
+            <Activity className="w-6 h-6" />
+            <span className="text-[10px] font-medium">Alerts</span>
           </Link>
         </div>
       </footer>

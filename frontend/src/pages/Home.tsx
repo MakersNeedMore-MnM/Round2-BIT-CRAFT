@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Shield, Plus, UserCircle, AlertTriangle } from 'lucide-react';
+import { Shield, Plus, UserCircle, AlertTriangle, Activity } from 'lucide-react';
 import { storageService } from '../services/storage';
 
 export function Home() {
@@ -56,6 +56,19 @@ export function Home() {
           <div className="flex-1">
             <h3 className="font-bold text-lg text-white">Trigger SOS</h3>
             <p className="text-brand-100 text-sm font-medium">Display emergency info instantly</p>
+          </div>
+        </Link>
+
+        <Link
+          to="/dashboard"
+          className="flex items-center gap-4 bg-white p-5 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow group"
+        >
+          <div className="bg-purple-100 p-3 rounded-xl group-hover:scale-110 transition-transform">
+            <Activity className="w-7 h-7 text-purple-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-lg text-gray-900">Responder Dashboard</h3>
+            <p className="text-sm text-gray-500">View nearby emergencies</p>
           </div>
         </Link>
       </div>

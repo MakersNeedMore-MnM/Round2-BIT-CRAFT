@@ -1,19 +1,21 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import type { SOSResponse, NearbyUser } from '../types';
+import type { SOSResponse, NearbyUser, AcknowledgedResponder } from '../types';
 import { sosService } from '../services/api';
 import { storageService } from '../services/storage';
-import { ShieldAlert, AlertTriangle, Droplet, Home } from 'lucide-react';
+import { ShieldAlert, AlertTriangle, Droplet, Home, Loader2, CheckCircle } from 'lucide-react';
 
 export function SOS() {
   const [sosData, setSosData] = useState<SOSResponse | null>(null);
+  const [responders, setResponders] = useState<AcknowledgedResponder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isResolving, setIsResolving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const profileId = storageService.getProfileId();
 
   useEffect(() => {
     const triggerSOS = async () => {
-      const profileId = storageService.getProfileId();
-      
+
       if (!profileId) {
         setIsLoading(false);
         setError("No profile found. Please create an E-Card first.");
@@ -23,6 +25,9 @@ export function SOS() {
       try {
         const data = await sosService.triggerSOS(profileId);
         setSosData(data);
+        if (data.acknowledged_responders) {
+          setResponders(data.acknowledged_responders);
+        }
       } catch (err: any) {
         console.error('Error triggering SOS:', err);
         setError('Failed to retrieve emergency information. Please check your connection.');
@@ -32,7 +37,78 @@ export function SOS() {
     };
 
     triggerSOS();
-  }, []);
+  }, [profileId]);
+
+  // WebSocket Connection for Sender
+  useEffect(() => {
+    if (!profileId) return;
+
+    let ws: WebSocket;
+    let reconnectTimeout: number | ReturnType<typeof setTimeout>;
+
+    const connect = () => {
+      const apiUrl = import.meta.env.VITE_API_URL || window.location.origin;
+      const wsProtocol = apiUrl.startsWith('https') ? 'wss://' : 'ws://';
+      const wsHost = apiUrl.replace(/^https?:\/\//, '');
+      const wsUrl = `${wsProtocol}${wsHost}/ws/alerts/${profileId}`;
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+
+          if (payload.type === 'ALERT_RESPONDER_ACKNOWLEDGED') {
+            const newResponder = {
+              profile_id: payload.data.responder_profile_id,
+              full_name: payload.data.responder_name,
+              responder_phone: payload.data.responder_phone,
+              status: payload.data.status
+            };
+
+            setResponders(prev => {
+              if (prev.some(r => r.profile_id === newResponder.profile_id)) {
+                return prev;
+              }
+              return [...prev, newResponder];
+            });
+          }
+        } catch (err) {
+          console.error("Failed to parse WebSocket message:", err);
+        }
+      };
+
+      ws.onclose = () => {
+        reconnectTimeout = setTimeout(connect, 3000); // Attempt reconnect after 3s
+      };
+    };
+
+    connect();
+
+    return () => {
+      clearTimeout(reconnectTimeout);
+      if (ws) {
+        ws.onclose = null; // Prevent reconnect on deliberate unmount cleanup
+        ws.close();
+      }
+    };
+  }, [profileId]);
+
+  const handleEndSOS = async () => {
+    if (!sosData || isResolving || !profileId) return;
+
+    setIsResolving(true);
+    try {
+      await sosService.resolveAlert(sosData.alert_id, profileId);
+      // Backend broadcasts ALERT_RESOLVED, UI will naturally reflect if needed,
+      // but for the sender, we can manually navigate away or just let the UI sit in resolved state
+      window.location.href = '/'; // Simple redirect back to home for the sender
+    } catch (err) {
+      console.error('Error ending SOS:', err);
+      alert('Failed to end the emergency alert. Please try again.');
+      setIsResolving(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -89,23 +165,59 @@ export function SOS() {
         </div>
 
         <div className="space-y-4">
-          <EmergencySection 
-            title="ALLERGIES" 
-            content={sosData.allergies} 
+          <EmergencySection
+            title="ALLERGIES"
+            content={sosData.allergies}
             isHighPriority={true}
           />
-          
-          <EmergencySection 
-            title="MEDICAL CONDITIONS" 
-            content={sosData.medical_conditions} 
+
+          <EmergencySection
+            title="MEDICAL CONDITIONS"
+            content={sosData.medical_conditions}
             isHighPriority={false}
           />
-          
-          <EmergencySection 
-            title="EMERGENCY CONTACTS" 
-            content={sosData.emergency_contacts} 
+
+          <EmergencySection
+            title="EMERGENCY CONTACTS"
+            content={sosData.emergency_contacts}
             isHighPriority={true}
           />
+
+          <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200">
+            <h3 className="text-xs font-black uppercase tracking-wider mb-3 text-blue-800 flex items-center justify-between">
+              <span>Responders coming to help: {responders.length}</span>
+            </h3>
+
+            {responders.length === 0 ? (
+              <p className="text-blue-600 text-sm font-medium italic">
+                Waiting for someone to respond...
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {responders.map((responder) => (
+                  <div
+                    key={responder.profile_id}
+                    className="flex items-center gap-3 bg-white rounded-xl p-3 border border-blue-100 shadow-sm"
+                  >
+                    <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
+                    <div>
+                      <p className="font-bold text-gray-900 leading-tight">
+                        {responder.full_name}
+                      </p>
+                      {responder.responder_phone && (
+                        <p className="text-sm font-medium text-gray-700">
+                          {responder.responder_phone}
+                        </p>
+                      )}
+                      <p className="text-sm text-blue-600 font-medium mt-0.5">
+                        On the way
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {sosData.nearby_users && sosData.nearby_users.length > 0 && (
             <div className="p-4 rounded-2xl bg-green-50 border border-green-200">
@@ -136,27 +248,42 @@ export function SOS() {
               </div>
             </div>
           )}
+
+          <div className="pt-4">
+             <button
+                onClick={handleEndSOS}
+                disabled={isResolving}
+                className="w-full bg-red-50 hover:bg-red-100 text-red-700 font-bold py-4 px-4 rounded-2xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50 border border-red-200"
+              >
+                {isResolving ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <CheckCircle className="w-5 h-5" />
+                )}
+                End SOS (I'm Safe)
+              </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function EmergencySection({ 
-  title, 
-  content, 
-  isHighPriority 
-}: { 
-  title: string, 
-  content: string, 
-  isHighPriority: boolean 
+function EmergencySection({
+  title,
+  content,
+  isHighPriority
+}: {
+  title: string,
+  content: string,
+  isHighPriority: boolean
 }) {
   if (!content) return null;
 
   return (
     <div className={`p-4 rounded-2xl border-l-4 ${
-      isHighPriority 
-        ? 'bg-orange-50 border-orange-500' 
+      isHighPriority
+        ? 'bg-orange-50 border-orange-500'
         : 'bg-blue-50 border-blue-500'
     }`}>
       <h3 className={`text-xs font-black uppercase tracking-wider mb-2 ${

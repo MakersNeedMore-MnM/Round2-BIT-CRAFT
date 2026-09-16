@@ -45,4 +45,14 @@ export const sosService = {
     const response = await api.get(`/alerts/${id}`);
     return response.data;
   },
+
+  acknowledgeAlert: async (alertId: string, responderId: string) => {
+    const response = await api.post(`/alerts/${alertId}/respond?profile_id=${responderId}`);
+    return response.data;
+  },
+
+  resolveAlert: async (alertId: string, profileId: string) => {
+    const response = await api.post(`/alerts/${alertId}/resolve?profile_id=${profileId}`);
+    return response.data;
+  },
 };

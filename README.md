@@ -4,9 +4,12 @@
 
 **Emergency E-Card** is a location-aware emergency assistance platform that combines a digital emergency medical profile with real-time SOS alerts and nearby responder coordination.
 
-**🚀 Live Demo:** https://emergency-e-card-1.onrender.com
+**🚀 Live Demo:** [Click Here To View Our Deployed Website](https://emergency-e-card-1.onrender.com)
 
-**📦 Repository:** https://github.com/MakersNeedMore-MnM/Round2-BIT-CRAFT
+**📦 Repository:** [Click Here To View Our GitHub Repository](https://github.com/MakersNeedMore-MnM/Round2-BIT-CRAFT)
+
+**🎬📊 Presentation & Demo:** [Click Here To View Our Project Presentation and Demo](https://drive.google.com/drive/folders/1qgwt4eNxSx_7NioGoX1IdSpbscnFxWXo?usp=sharing)
+
 
 **Morrow 1.0 · Round 2 · Team BIT-CRAFT**
 

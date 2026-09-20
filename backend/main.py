@@ -312,7 +312,12 @@ def update_profile(profile_id: str, profile: ProfileUpdate, db: Session = Depend
     return db_profile
 
 @app.get("/sos/{profile_id}")
-async def sos_alert(profile_id: str, db: Session = Depends(get_db)):
+async def sos_alert(
+    profile_id: str,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
+    db: Session = Depends(get_db)
+):
     """
     Trigger an SOS alert, save the emergency event,
     and find nearby registered users.
@@ -328,11 +333,30 @@ async def sos_alert(profile_id: str, db: Session = Depends(get_db)):
             detail="Profile not found"
         )
 
-    if db_profile.latitude is None or db_profile.longitude is None:
+    if (latitude is None) != (longitude is None):
         raise HTTPException(
             status_code=400,
-            detail="Profile location is not available"
+            detail="Both latitude and longitude are required"
         )
+
+    if latitude is not None and longitude is not None:
+        if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid GPS coordinates"
+            )
+
+        trigger_latitude = str(latitude)
+        trigger_longitude = str(longitude)
+    else:
+        if db_profile.latitude is None or db_profile.longitude is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Profile location is not available"
+            )
+
+        trigger_latitude = db_profile.latitude
+        trigger_longitude = db_profile.longitude
 
     current_time = datetime.now(timezone.utc)
 
@@ -376,8 +400,8 @@ async def sos_alert(profile_id: str, db: Session = Depends(get_db)):
     expires_at = current_time + timedelta(minutes=10)
     emergency_alert = EmergencyAlert(
         profile_id=db_profile.id,
-        latitude=db_profile.latitude,
-        longitude=db_profile.longitude,
+        latitude=trigger_latitude,
+        longitude=trigger_longitude,
         status="active",
         created_at=current_time,
         expires_at=expires_at
@@ -399,8 +423,8 @@ async def sos_alert(profile_id: str, db: Session = Depends(get_db)):
             continue
 
         distance = calculate_distance(
-            db_profile.latitude,
-            db_profile.longitude,
+            trigger_latitude,
+            trigger_longitude,
             profile.latitude,
             profile.longitude
         )
@@ -419,8 +443,8 @@ async def sos_alert(profile_id: str, db: Session = Depends(get_db)):
                     "alert_id": emergency_alert.id,
                     "profile_id": db_profile.id,
                     "full_name": db_profile.full_name,
-                    "latitude": db_profile.latitude,
-                    "longitude": db_profile.longitude,
+                    "latitude": trigger_latitude,
+                    "longitude": trigger_longitude,
                     "distance_km": round(distance, 2),
                     "expires_at": expires_at.isoformat(),
                     "has_acknowledged": False
@@ -447,8 +471,8 @@ async def sos_alert(profile_id: str, db: Session = Depends(get_db)):
         "alert_id": emergency_alert.id if not existing_alert else existing_alert.id,
         "profile_id": db_profile.id,
         "full_name": db_profile.full_name,
-        "latitude": db_profile.latitude,
-        "longitude": db_profile.longitude,
+        "latitude": trigger_latitude,
+        "longitude": trigger_longitude,
         "blood_group": db_profile.blood_group,
         "allergies": db_profile.allergies,
         "medical_conditions": db_profile.medical_conditions,

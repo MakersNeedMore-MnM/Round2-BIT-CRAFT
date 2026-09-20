@@ -1,5 +1,8 @@
+import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { profileService } from '../services/api';
+import { storageService } from '../services/storage';
 import { HeartPulse, Home, PlusCircle, User, AlertCircle, Activity } from 'lucide-react';
 
 interface LayoutProps {
@@ -8,6 +11,54 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const location = useLocation();
+  const lastLocationUpdateRef = useRef(0);
+
+  useEffect(() => {
+    if (!navigator.geolocation) {
+      return;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      async (position) => {
+        const currentProfileId = storageService.getProfileId();
+
+        if (!currentProfileId) {
+          return;
+        }
+
+        const now = Date.now();
+
+        // Avoid sending location updates more than once every 5 seconds.
+        if (now - lastLocationUpdateRef.current < 5000) {
+          return;
+        }
+
+        lastLocationUpdateRef.current = now;
+
+        try {
+          await profileService.updateProfileLocation(
+            currentProfileId,
+            position.coords.latitude,
+            position.coords.longitude
+          );
+        } catch (err) {
+          console.error('Failed to update live location:', err);
+        }
+      },
+      (err) => {
+        console.error('Live location error:', err);
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+        timeout: 10000,
+      }
+    );
+
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }, []);
   
   const isActive = (path: string) => {
     return location.pathname === path ? 'text-brand-600' : 'text-gray-500 hover:text-gray-900';

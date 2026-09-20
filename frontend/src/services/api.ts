@@ -24,13 +24,31 @@ export const profileService = {
     const response = await api.put<Profile>(`/profiles/${id}`, data);
     return response.data;
   },
+
+  updateProfileLocation: async (
+    id: string,
+    latitude: number,
+    longitude: number
+  ): Promise<Profile> => {
+    const response = await api.put<Profile>(`/profiles/${id}`, {
+      latitude: latitude.toString(),
+      longitude: longitude.toString(),
+    });
+    return response.data;
+  },
 };
 
 export const sosService = {
-  triggerSOS: async (id: string): Promise<SOSResponse> => {
-    const response = await api.get<SOSResponse>(`/sos/${id}`);
-    return response.data;
-  },
+  triggerSOS: async (
+  id: string,
+  latitude: number,
+  longitude: number
+): Promise<SOSResponse> => {
+  const response = await api.get<SOSResponse>(
+    `/sos/${id}?latitude=${latitude}&longitude=${longitude}`
+  );
+  return response.data;
+},
 
   getNearbyUsers: async (id: string) => {
     const response = await api.get(`/nearby/${id}`);

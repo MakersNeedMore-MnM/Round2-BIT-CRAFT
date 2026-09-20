@@ -86,6 +86,14 @@ export function ResponderDashboard() {
     }
   };
 
+  const handleNavigateToSOS = (alert: NearbyAlert) => {
+    const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(
+      `${alert.latitude},${alert.longitude}`
+    )}`;
+
+    window.open(mapsUrl, '_blank', 'noopener,noreferrer');
+  };
+
   // WebSocket Connection
   useEffect(() => {
     if (!profileId) return;
@@ -288,6 +296,16 @@ export function ResponderDashboard() {
                       </>
                     )}
                   </button>
+
+                  {alert.has_acknowledged && (
+                    <button
+                      onClick={() => handleNavigateToSOS(alert)}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-colors text-sm shadow-sm"
+                    >
+                      <Navigation className="w-5 h-5" />
+                      Navigate to SOS
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

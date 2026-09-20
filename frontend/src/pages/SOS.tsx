@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import type { SOSResponse, NearbyUser, AcknowledgedResponder } from '../types';
-import { sosService } from '../services/api';
+import { profileService, sosService } from '../services/api';
 import { storageService } from '../services/storage';
 import { ShieldAlert, AlertTriangle, Droplet, Home, Loader2, CheckCircle } from 'lucide-react';
 
@@ -15,7 +15,6 @@ export function SOS() {
 
   useEffect(() => {
     const triggerSOS = async () => {
-
       if (!profileId) {
         setIsLoading(false);
         setError("No profile found. Please create an E-Card first.");
@@ -23,14 +22,31 @@ export function SOS() {
       }
 
       try {
-        const data = await sosService.triggerSOS(profileId);
+        const profile = await profileService.getProfile(profileId);
+
+        if (!profile.latitude || !profile.longitude) {
+          setError('Your current location is not available yet. Please try again.');
+          setIsLoading(false);
+          return;
+        }
+
+        const data = await sosService.triggerSOS(
+          profileId,
+          Number(profile.latitude),
+          Number(profile.longitude)
+        );
+
         setSosData(data);
+
         if (data.acknowledged_responders) {
           setResponders(data.acknowledged_responders);
         }
       } catch (err: any) {
         console.error('Error triggering SOS:', err);
-        setError('Failed to retrieve emergency information. Please check your connection.');
+        setError(
+          err.response?.data?.detail ||
+          'Failed to retrieve emergency information. Please check your connection.'
+        );
       } finally {
         setIsLoading(false);
       }

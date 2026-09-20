@@ -2,7 +2,7 @@
 
 ### The fastest help is often the person standing closest to you.
 
-**Emergency E-Card** is a real-time emergency assistance platform which connects a person in distress with nearby willing responders.
+**Emergency E-Card** is a location-aware emergency assistance platform that combines a digital emergency medical profile with real-time SOS alerts and nearby responder coordination.
 
 **🚀 Live Demo:** https://emergency-e-card-1.onrender.com
 
@@ -14,13 +14,18 @@
 
 ## ⚡ THE IDEA
 
-A person creates an **Emergency E-Card** once with essential emergency information.
+During an emergency, critical information such as **blood group, allergies, medical conditions, medications, emergency contacts, and current location** should be available quickly.
 
-When an emergency occurs:
+Emergency E-Card brings these details together in one digital profile and connects the person in distress with nearby responders through a location-aware SOS system.
 
-**SOS → Nearby responders discover the alert → "I'm Coming to Help" → Real-time notification → Help is on the way**
+### The complete emergency flow
 
-The person requesting help can see who is responding without manually refreshing the application.
+**Emergency occurs → SOS is triggered → Current location is captured → Nearby responders within 1 km are identified → Responder acknowledges → Navigation opens → Help is on the way → SOS is resolved**
+
+The system supports both:
+
+* **Self-triggered SOS** — the affected person triggers the alert directly.
+* **Bystander-triggered SOS** — if the affected person is unconscious or unable to operate the application, a nearby person can use the person's phone to trigger the SOS.
 
 > **Our goal is simple: shrink the gap between "I need help" and "someone is on the way."**
 
@@ -28,139 +33,264 @@ The person requesting help can see who is responding without manually refreshing
 
 ## 🎯 THE PROBLEM
 
-During an emergency, the closest available help may be only a few metres or minutes away.
+During an emergency, the people nearby may be willing to help, but they may not have access to the information they need.
 
-The challenge is connecting the person who needs help with someone nearby who can actually respond.
+Important medical and emergency information can be:
 
-Traditional communication can create several gaps:
+* scattered across different places
+* difficult to communicate under stress
+* unavailable when the injured person cannot speak
+* missing from the hands of nearby responders
+* disconnected from the person's real-time location
 
-* **Nobody Nearby Knows** — People who could help may not know that someone nearby needs assistance.
-* **Details Cost Time** — Sharing identity, location, and emergency information manually takes valuable time.
-* **No Response Feedback** — The person requesting help may not know whether anyone is actually coming.
-* **Fragmented Communication** — Calls, messages, and different applications handle different parts of an emergency.
+This creates several critical gaps:
+
+* **Medical Information Gap** — Blood group, allergies, medical conditions, medications, and emergency contacts may not be immediately available.
+* **Location Gap** — Nearby people may not know exactly where assistance is needed.
+* **Awareness Gap** — People capable of helping may not know that someone nearby needs assistance.
+* **Response Gap** — The person requesting help may not know whether someone has actually accepted the emergency.
+* **Coordination Gap** — Even after someone responds, reaching the emergency location can require additional communication.
 
 ---
 
 ## 💡 THE SOLUTION
 
-Emergency E-Card connects three critical pieces of information:
+Emergency E-Card combines three essential capabilities:
 
-|                      |                             |
-| -------------------- | --------------------------- |
-| 🪪 **Who You Are**   | Emergency Profile           |
-| 📍 **Where You Are** | Location-Aware SOS          |
-| 🤝 **Who Is Coming** | Real-Time Responder Updates |
+|                      |                                    |
+| -------------------- | ---------------------------------- |
+| 🪪 **Who You Are**   | Digital Emergency Medical Profile  |
+| 📍 **Where You Are** | Live Location + Location-Aware SOS |
+| 🤝 **Who Is Coming** | Nearby Responder Coordination      |
 
-The user creates their emergency profile once.
+The user creates an Emergency E-Card once and stores important emergency information such as:
 
-When an SOS is triggered, nearby users can discover the active emergency based on location and respond with a single action.
+* Full name
+* Phone number
+* Blood group
+* Allergies
+* Medical conditions
+* Current medications
+* Emergency contacts
 
-The SOS owner then receives responder information instantly through a **WebSocket connection**.
+The application also tracks the user's current browser/device location while the app is active.
+
+When an SOS is triggered, the current coordinates are associated with the emergency alert. Nearby users within the supported **1 km radius** can discover the alert, acknowledge that they are coming to help, and navigate to the emergency location.
 
 ---
 
 ## ✨ KEY FEATURES
 
-### 🪪 Emergency Profile
+### 🪪 Emergency Medical Profile
 
-Users create an emergency profile containing:
+Users create a digital emergency profile containing:
 
 * Full name
 * Phone number
 * Blood group
-* Location
+* Allergies
+* Medical conditions
+* Current medications
+* Emergency contacts
+* Current location
 
-This information is available when an emergency occurs instead of requiring everything to be entered under stress.
+The information is stored centrally so it can be retrieved during an emergency without requiring the user to manually provide every detail.
+
+---
+
+### 🚑 Emergency Details Access
+
+The application provides an emergency details view containing important medical information from the profile.
+
+Responders can access relevant emergency information such as:
+
+* Patient name
+* Phone number
+* Blood group
+* Allergies
+* Medical conditions
+* Medications
+* Emergency contacts
+
+This is designed to reduce the time spent collecting critical information during an emergency.
+
+---
+
+### 📍 Live Location Tracking
+
+The application continuously monitors the user's browser/device location while the application is active.
+
+The latest coordinates are synchronized with the user's emergency profile so that the system can work with the user's current location.
+
+When an SOS is triggered, the current coordinates are used for the emergency alert and nearby responder calculations.
+
+---
 
 ### 🆘 One-Tap SOS
 
-A user can trigger an emergency alert with their location.
+A user can trigger an emergency alert using the SOS flow.
 
-The alert remains active until the owner ends it or it expires.
+The SOS includes:
 
-### 📍 Nearby Emergency Detection
+* Emergency profile information
+* Current latitude and longitude
+* A unique emergency alert ID
+* Nearby responder discovery
 
-Active emergencies are filtered using location so responders can discover emergencies within the supported proximity range.
+The alert remains active until it is resolved by the SOS owner or reaches its expiry conditions.
 
-The current prototype uses a **1 km proximity boundary** for responder discovery and acknowledgement.
+---
 
-### 🤝 "I'm Coming to Help"
+### 📍 1 km Nearby Emergency Detection
 
-A nearby user can acknowledge an active emergency with a single action.
+SOS alerts are location-aware.
 
-The backend validates and records the acknowledgement.
+The current prototype uses a **1 km proximity boundary** for nearby emergency discovery and responder acknowledgement.
+
+This means:
+
+* Users within the supported radius can discover relevant emergencies.
+* Users outside the supported radius do not see unrelated nearby SOS alerts.
+* Responder acknowledgement is validated using location.
+
+This prevents an emergency alert from being unnecessarily exposed to distant users.
+
+---
+
+### 🤝 "I'm on the Way"
+
+A nearby responder can acknowledge an active emergency using the **"I'm on the Way"** action.
+
+The backend validates the responder and stores the acknowledgement.
+
+The SOS owner can then see that a responder has accepted the emergency.
+
+---
 
 ### ⚡ Real-Time Responder Updates
 
-The SOS owner receives responder information through WebSockets without refreshing the application.
+The SOS owner receives responder information through a **WebSocket connection** without manually refreshing the application.
 
-The owner can see:
+The response information can include:
 
 * Responder name
 * Responder phone number
-* Number of responders
 * Response status
+* Number of responders
 
-### 👥 Multiple Responders
+This allows the person requesting help to know when someone is actively responding.
 
-More than one nearby user can respond to the same emergency.
+---
 
-Each acknowledgement is stored separately and delivered to the SOS owner in real time.
+### 👥 Multiple Responder Support
 
-### 🔐 Owner-Controlled SOS
+More than one nearby responder can acknowledge the same emergency.
 
-Only the user who created the SOS can end it using:
+Each acknowledgement is stored independently, allowing the SOS owner to see multiple people responding to the same alert.
+
+---
+
+### 🗺️ Google Maps Navigation
+
+Once a responder acknowledges the emergency, the responder dashboard provides a **"Navigate to SOS"** action.
+
+The system opens Google Maps with the emergency coordinates as the destination, allowing the responder to navigate directly to the SOS location.
+
+---
+
+### 🛡️ Owner-Controlled SOS Resolution
+
+Only the profile that created the SOS can resolve the active emergency.
+
+The owner can use:
 
 **"End SOS (I'm Safe)"**
 
-Responders cannot terminate another user's emergency.
+Once the emergency is ended:
+
+* The active alert is resolved.
+* The alert is removed from active responder views.
+* Responders no longer see it as an active emergency.
+
+---
+
+### 👤 Self-Triggered Emergency
+
+When the person in distress is conscious and able to use their phone:
+
+**Open E-Card → Trigger SOS → Location is captured → Nearby responders receive the alert → Responder acknowledges → Navigation begins**
+
+---
+
+### 👥 Bystander-Triggered Emergency
+
+When the injured person is unconscious or unable to operate the application:
+
+**Bystander uses the person's phone → Triggers SOS → Current location is captured → Nearby responders receive the alert → Responder acknowledges → Navigation begins**
+
+This provides a way to request additional nearby help even when the affected person cannot interact with the application themselves.
 
 ---
 
 ## 🔄 HOW IT WORKS
 
 ```text
-        CREATE EMERGENCY PROFILE
-                  │
-                  ▼
-             TRIGGER SOS
-                  │
-                  ▼
-        FIND NEARBY ACTIVE ALERT
-                  │
-                  ▼
-       "I'M COMING TO HELP"
-                  │
-                  ▼
-        SERVER-SIDE VALIDATION
-                  │
-                  ▼
-       STORE ACKNOWLEDGEMENT
-                  │
-                  ▼
-        WEBSOCKET NOTIFICATION
-                  │
-                  ▼
-        SOS OWNER SEES RESPONDER
-                  │
-                  ▼
-          ASSISTANCE ARRIVES
-                  │
-                  ▼
-          OWNER ENDS THE SOS
+             CREATE EMERGENCY E-CARD
+                       │
+                       ▼
+              LIVE LOCATION ACTIVE
+                       │
+                       ▼
+                  TRIGGER SOS
+                       │
+                       ▼
+          CAPTURE CURRENT GPS LOCATION
+                       │
+                       ▼
+          FIND RESPONDERS WITHIN 1 KM
+                       │
+                       ▼
+             RESPONDER SEES ALERT
+                       │
+                       ▼
+              "I'M ON THE WAY"
+                       │
+                       ▼
+             SERVER-SIDE VALIDATION
+                       │
+                       ▼
+              STORE ACKNOWLEDGEMENT
+                       │
+                       ▼
+          REAL-TIME WEBSOCKET UPDATE
+                       │
+                       ▼
+        SOS OWNER SEES THE RESPONDER
+                       │
+                       ▼
+              NAVIGATE TO SOS
+                       │
+                       ▼
+                 HELP ARRIVES
+                       │
+                       ▼
+              "END SOS (I'M SAFE)"
 ```
 
 ### Emergency Flow
 
-1. **Create Profile** — Save emergency information and location.
-2. **Trigger SOS** — Create an active emergency alert.
-3. **Discover Nearby Alerts** — Nearby users see relevant active emergencies.
-4. **Respond** — A nearby user selects **"I'm Coming to Help."**
-5. **Validate** — The backend verifies alert status, expiry, profile, location, proximity, and duplicate conditions.
-6. **Store** — The acknowledgement is stored in PostgreSQL.
-7. **Notify** — A WebSocket event is sent to the SOS owner's active connection.
-8. **Responders Appear** — The owner sees responder details and responder count without refreshing.
-9. **End the Emergency** — The SOS owner selects **"End SOS (I'm Safe)"** once safe.
+1. **Create Profile** — Enter medical and emergency information.
+2. **Enable Location** — Allow browser/device location access.
+3. **Track Location** — The application keeps the profile's location updated while active.
+4. **Trigger SOS** — Create an active emergency alert using the current coordinates.
+5. **Find Nearby Responders** — The backend identifies relevant users within the supported 1 km radius.
+6. **Display Alert** — Nearby responders see the emergency on their dashboard.
+7. **Acknowledge** — A responder selects **"I'm on the Way."**
+8. **Validate** — The backend verifies the alert, responder, location, proximity, expiry, and duplicate conditions.
+9. **Store** — The acknowledgement is stored in PostgreSQL.
+10. **Notify** — A WebSocket event updates the SOS owner's active session.
+11. **Navigate** — The responder can open Google Maps using the SOS coordinates.
+12. **Resolve** — The SOS owner ends the emergency once safe.
 
 ---
 
@@ -168,54 +298,86 @@ Responders cannot terminate another user's emergency.
 
 ### ⚡ Real-Time Communication
 
-The application uses **WebSockets** to push responder information directly to the SOS owner's active session.
+The application uses **WebSockets** to push responder information to the SOS owner's active session.
 
-There is no need for continuous polling or manual page refreshes.
+There is no need for continuous polling or manual page refreshes to receive responder updates.
 
-### 🔐 Server-Side Authorization
+---
+
+### 📍 Live Location Synchronization
+
+The frontend uses the browser's Geolocation API to monitor the user's current position.
+
+Location updates are sent to the backend and associated with the user's emergency profile.
+
+When an SOS is triggered, the latest available coordinates are passed to the backend so the emergency uses the current location rather than relying only on older profile data.
+
+---
+
+### 📍 Location-Based Alert Filtering
+
+The backend performs proximity calculations to identify nearby users.
+
+The prototype uses a **1 km radius** for responder discovery and acknowledgement.
+
+The backend also validates latitude and longitude ranges before using coordinates in emergency operations.
+
+---
+
+### 🔐 Server-Side Validation
 
 Emergency actions are enforced by the backend rather than relying only on frontend restrictions.
 
-Only the profile that created an SOS can resolve it.
+The backend validates:
 
-A responder cannot terminate someone else's emergency simply by manipulating the frontend.
+* Alert status
+* Alert expiry
+* Profile identity
+* Responder identity
+* GPS coordinates
+* Proximity to the emergency
+* Duplicate acknowledgements
+* SOS ownership during resolution
 
-### 📍 Location-Based Validation
-
-The backend verifies that a responder has a valid location and is within the supported proximity range before accepting an acknowledgement.
+---
 
 ### 👥 Multiple Responder Support
 
 Multiple responders can acknowledge the same emergency.
 
-Each responder is stored independently, allowing the SOS owner to see everyone who is coming to help.
+Each responder is stored independently and can be delivered to the SOS owner in real time.
+
+---
 
 ### 🛡️ Duplicate Protection
 
-The backend prevents the same responder from acknowledging the same alert more than once.
+The backend prevents the same responder from acknowledging the same emergency multiple times.
 
-A database uniqueness constraint provides an additional layer of protection against duplicate acknowledgements.
+Database constraints provide an additional protection layer against duplicate acknowledgement records.
 
 ---
 
 ## 🏗️ ARCHITECTURE
 
-Emergency E-Card is a full-stack system built around REST APIs, location-based alert discovery, PostgreSQL persistence, and WebSockets.
+Emergency E-Card is a full-stack system built around REST APIs, browser geolocation, location-based alert discovery, PostgreSQL persistence, and WebSockets.
 
 ```text
 ┌─────────────────────────────────────┐
 │            React Frontend           │
 │         TypeScript + Vite           │
+│                                     │
+│  UI · Geolocation · REST · WebSocket│
 └──────────────────┬──────────────────┘
                    │
              REST API + WebSocket
                    │
                    ▼
 ┌─────────────────────────────────────┐
-│           FastAPI Backend            │
+│            FastAPI Backend           │
 │                                     │
-│ Profiles · SOS · Proximity          │
-│ Validation · Responders · Auth      │
+│ Profiles · SOS · Location           │
+│ Proximity · Responders              │
+│ Validation · Resolution             │
 │ Real-Time Notifications             │
 └──────────────────┬──────────────────┘
                    │
@@ -223,32 +385,40 @@ Emergency E-Card is a full-stack system built around REST APIs, location-based a
                    │
                    ▼
 ┌─────────────────────────────────────┐
-│        PostgreSQL Database          │
+│         PostgreSQL Database         │
 │          Neon Production            │
 └─────────────────────────────────────┘
 ```
 
 ### Frontend
 
-React and TypeScript provide the user interface. Axios handles REST communication, while WebSockets deliver real-time emergency updates.
+React and TypeScript provide the application interface.
+
+The frontend uses:
+
+* Axios for REST API communication
+* Browser Geolocation API for live location
+* WebSockets for real-time responder updates
+* React Router for navigation
 
 ### Backend
 
 FastAPI handles:
 
-* Profile management
+* Profile creation and updates
+* Live profile location updates
 * Emergency alerts
-* Proximity checks
-* Responder acknowledgements
-* Authorization
-* Alert resolution
+* Proximity calculations
+* Responder acknowledgement
+* Server-side validation
+* SOS resolution
 * WebSocket notifications
 
 ### Database
 
 PostgreSQL stores:
 
-* Profiles
+* Emergency profiles
 * Emergency alerts
 * Responder acknowledgements
 
@@ -261,11 +431,13 @@ PostgreSQL stores:
 | Layer                       | Technologies                          |
 | --------------------------- | ------------------------------------- |
 | **Frontend**                | React, TypeScript, Vite, Tailwind CSS |
+| **Location**                | Browser Geolocation API               |
 | **API Communication**       | REST, Axios                           |
 | **Real-Time Communication** | WebSockets                            |
 | **Backend**                 | Python, FastAPI, Uvicorn              |
 | **ORM**                     | SQLAlchemy                            |
 | **Database**                | PostgreSQL, Neon                      |
+| **Navigation**              | Google Maps                           |
 | **Deployment**              | Render                                |
 | **Version Control**         | Git, GitHub                           |
 
@@ -274,24 +446,29 @@ PostgreSQL stores:
 ## 🚀 LIVE APPLICATION
 
 **Try Emergency E-Card:**
+
 https://emergency-e-card-1.onrender.com
 
 ### For Someone Requesting Help
 
 1. Create your Emergency E-Card.
-2. Enter your name, phone number, blood group, and location.
+2. Enter your medical and emergency information.
 3. Allow location access.
-4. Trigger an SOS.
-5. Watch responders appear in real time.
-6. End the SOS using **"End SOS (I'm Safe)"** once safe.
+4. Keep the application active so the current location can be synchronized.
+5. Trigger an SOS during an emergency.
+6. Nearby responders can discover the alert within the supported 1 km radius.
+7. See responder acknowledgements in real time.
+8. End the SOS using **"End SOS (I'm Safe)"** once safe.
 
 ### For Someone Helping
 
 1. Open the application.
 2. View active emergencies near you.
-3. Select an emergency you can reach.
-4. Tap **"I'm Coming to Help."**
-5. The SOS owner immediately receives your responder information.
+3. Open a relevant emergency alert.
+4. Review the available emergency information.
+5. Select **"I'm on the Way."**
+6. Use **"Navigate to SOS"** to open Google Maps.
+7. Travel to the emergency location.
 
 > **Prototype note:** The backend runs on Render's free tier. After inactivity, the first request may take some time while the service wakes up.
 
@@ -299,24 +476,32 @@ https://emergency-e-card-1.onrender.com
 
 ## 📊 DEPLOYMENT VERIFICATION
 
-The deployed system has been tested through the complete emergency cycle:
+The deployed application has been practically tested through the complete emergency workflow.
 
-**Profile Creation → SOS Trigger → Nearby Alert Detection → Responder Acknowledgement → Real-Time Notification → Responder Details → SOS Resolution**
+### Verified production behaviours
 
-The following production behaviours have been verified:
-
-* Profile creation
-* SOS creation
-* Nearby alert detection
-* 1 km proximity validation
-* Responder acknowledgement
-* Multiple responders
-* Real-time WebSocket notifications
-* Responder name and phone display
-* Duplicate acknowledgement prevention
-* Owner-only SOS resolution
+* Emergency profile access
+* Live browser location retrieval
+* Location-aware SOS triggering
+* Nearby SOS alert detection
+* **1 km proximity filtering**
+* Responder acknowledgement using **"I'm on the Way"**
+* Real-time responder updates
+* Responder details
+* Google Maps navigation to SOS coordinates
+* SOS resolution / **"End SOS"**
+* Alert removal after resolution
+* Location-based isolation between distant users
 * PostgreSQL persistence through Neon
 * Frontend-to-backend communication through the deployed system
+
+### Practical location test
+
+The location filtering was tested using real users in different physical locations.
+
+A nearby responder could receive the relevant SOS, while a user located far outside the supported radius could not see that emergency.
+
+The reverse case was also verified, confirming that distant users do not receive unrelated SOS alerts.
 
 ---
 
@@ -373,15 +558,16 @@ The deployed application is available at:
 
 The prototype can be extended with:
 
-* Interactive emergency maps and live navigation
+* Interactive emergency maps and richer live navigation
 * Push notifications for nearby emergencies
-* Automatic emergency contact notifications
+* Automatic emergency-contact notifications
 * Ambulance and hospital integration
 * Verified responder accounts
 * Native mobile applications
 * Offline emergency support
-* Enhanced location tracking
+* Background location support
 * Emergency incident analytics
+* Integration with official emergency-service workflows
 
 ---
 

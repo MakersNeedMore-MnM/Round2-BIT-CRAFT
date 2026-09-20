@@ -2,7 +2,7 @@
 
 ### The fastest help is often the person standing closest to you.
 
-**Emergency E-Card** is a real-time emergency assistance platform that connects a person in distress with nearby willing responders.
+**Emergency E-Card** is a real-time emergency assistance platform which connects a person in distress with nearby willing responders.
 
 **🚀 Live Demo:** https://emergency-e-card-1.onrender.com
 
